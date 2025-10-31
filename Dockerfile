@@ -28,9 +28,8 @@ ENV PATH="/root/.local/bin:/root/.cargo/bin:$PATH"
 # copy dependency files
 COPY pyproject.toml uv.lock ./
 
-# install dependencies into .venv using uv
-RUN --mount=type=cache,id=cache-uv,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev
+# install dependencies using uv (no cache mount for Railway)
+RUN uv sync --frozen --no-install-project --no-dev
 
 # copy application code
 COPY src/ ./src/
