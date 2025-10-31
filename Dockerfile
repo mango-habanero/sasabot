@@ -27,7 +27,7 @@ ENV PATH="/root/.cargo/bin:$PATH"
 COPY pyproject.toml uv.lock ./
 
 # install dependencies into .venv using uv
-RUN --mount=type=cache,target=/root/.cache/uv \
+RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
 # copy application code
@@ -39,6 +39,12 @@ COPY alembic.ini ./
 # ================================
 FROM python:3.13-slim-bookworm
 
+# install runtime dependencies AS ROOT (before switching user)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 # create non-root user
 RUN useradd --create-home --shell /bin/bash sasabot
 USER sasabot
@@ -47,12 +53,6 @@ WORKDIR /home/sasabot/app
 # set environment
 ENV PATH="/home/sasabot/app/.venv/bin:$PATH" \
     PYTHONPATH="/home/sasabot/app/src"
-
-# install minimal runtime deps
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
 
 # copy from builder
 COPY --from=builder --chown=sasabot:sasabot /app /home/sasabot/app
