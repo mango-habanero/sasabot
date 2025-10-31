@@ -21,13 +21,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # install uv (https://docs.astral.sh/uv/)
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.cargo/bin:$PATH"
+
+# ensure uv is on PATH
+ENV PATH="/root/.local/bin:/root/.cargo/bin:$PATH"
 
 # copy dependency files
 COPY pyproject.toml uv.lock ./
 
 # install dependencies into .venv using uv
-RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
+RUN --mount=type=cache,id=cache-uv,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
 # copy application code
