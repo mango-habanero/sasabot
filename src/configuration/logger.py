@@ -1,92 +1,72 @@
 import logging
 import sys
-from typing import Optional
 
 import structlog
-from structlog.types import Processor
+from structlog.typing import Processor
 
 
-def _get_shared_processors() -> list[Processor]:
-    """Get processors shared between sync and async configurations."""
-    timestamper = structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False)
-    return [
+def configure_logging(enable_json: bool = False, level: str = "INFO") -> None:
+    """
+    Configures the logging system, setting up structured logging with optional
+    JSON formatting and specific log level.
+
+    :param enable_json: If True, enables JSON formatting for log messages;
+        otherwise, logs are output in a human-readable format.
+    :type enable_json: bool
+    :param level: The logging level as a string (e.g., "DEBUG", "INFO"). Defaults
+        to "INFO".
+    :type level: str
+    :return: None
+    """
+
+    # convert level to numeric value once
+    log_level = getattr(logging, level.upper(), logging.INFO)
+
+    # set up the root logger to direct all output to stdout
+    logging.basicConfig(
+        format="%(message)s",
+        stream=sys.stdout,
+        level=log_level,
+    )
+
+    # define shared processors
+    processors: list[Processor] = [
         structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.stdlib.ExtraAdder(),
-        timestamper,
+        structlog.stdlib.add_logger_name,
+        structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False),
         structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.CallsiteParameterAdder(
+            [structlog.processors.CallsiteParameter.PATHNAME]
+        ),
+        structlog.processors.JSONRenderer()
+        if enable_json
+        else structlog.dev.ConsoleRenderer(colors=True),
     ]
 
-
-def configure_logging(
-        enable_json_logging: Optional[bool] = None,
-        log_level: Optional[str] = None
-) -> None:
-
-    logging.basicConfig(level=logging.NOTSET)
-    for handler in logging.root.handlers[:]:
-        logging.root.removeHandler(handler)
-    logging.root.setLevel(logging.NOTSET)
-
-    shared_processors = _get_shared_processors()
-
-    structlog.configure(
-        processors=shared_processors + [
-            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
-        ],
+    structlog.configure_once(
+        processors=processors,
+        wrapper_class=structlog.make_filtering_bound_logger(log_level),
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
-        wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
 
-    renderer = (
-        structlog.processors.JSONRenderer()
-        if enable_json_logging
-        else structlog.dev.ConsoleRenderer(colors=True)
-    )
-
-    formatter = structlog.stdlib.ProcessorFormatter(
-        foreign_pre_chain=shared_processors,
-        processors=[
-            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-            structlog.processors.format_exc_info,
-            renderer,
-        ],
-    )
-
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
-    handler.setLevel(log_level.upper())
-
-    root_logger = logging.getLogger()
-    root_logger.addHandler(handler)
-    root_logger.setLevel(log_level.upper())
-
-    for logger_name in ["uvicorn", "granian", "_granian", "uvloop", "h11", "httpcore", "httpx"]:
-        logger = logging.getLogger(logger_name)
-        logger.handlers = []
-        logger.propagate = True
-
-    def handle_exception(exc_type, exc_value, exc_traceback):
+    # hook uncaught exceptions
+    def _handle_uncaught(exc_type, exc_value, exc_traceback):
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
-
-        _logger = structlog.get_logger("system")
-        _logger.error(
-            "Uncaught exception",
-            exc_info=(exc_type, exc_value, exc_traceback)
+        structlog.get_logger("system").error(
+            "Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback)
         )
 
-    sys.excepthook = handle_exception
+    sys.excepthook = _handle_uncaught
 
-    structlog.get_logger("system").info(
-        "Logging configured",
-        json_format=enable_json_logging,
-        level=log_level.upper()
+    structlog.get_logger("system").debug(
+        "Logging configured", json_format=enable_json, level=level.upper()
     )
+
 
 app_logger = structlog.get_logger("system")
