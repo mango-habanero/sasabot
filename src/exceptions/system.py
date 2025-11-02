@@ -2,29 +2,8 @@
 
 from typing import Any
 
-
-class BaseApplicationException(Exception):
-    def __init__(
-        self,
-        message: str,
-        code: str = "INTERNAL_ERROR",
-        details: dict[str, Any] | None = None,
-        status_code: int = 500,
-    ):
-        self.message = message
-        self.code = code
-        self.details = details or {}
-        self.status_code = status_code
-        super().__init__(self.message)
-
-    def __str__(self) -> str:
-        return f"{self.code}: {self.message}"
-
-
-class PackageVersionNotFoundError(Exception):
-    def __init__(self, message: str = "Version not found in pyproject.toml") -> None:
-        self.message: str = message
-        super().__init__(self.message)
+from ..data.enums import ErrorCode
+from .base import BaseApplicationException
 
 
 class InvalidStateTransitionError(BaseApplicationException):
@@ -44,7 +23,38 @@ class InvalidStateTransitionError(BaseApplicationException):
 
         super().__init__(
             message=message,
-            code="INVALID_STATE_TRANSITION",
+            code=ErrorCode.INVALID_STATE_TRANSITION.code,
             details=details,
-            status_code=400,  # Bad Request - business rule violation
+            status_code=ErrorCode.INVALID_STATE_TRANSITION.status,
+        )
+
+
+class PackageVersionNotFoundError(Exception):
+    def __init__(self, message: str = "Version not found in pyproject.toml") -> None:
+        self.message: str = message
+        super().__init__(self.message)
+
+
+class ResourceNotFoundError(BaseApplicationException):
+    """Raised when a business-related resource is not found."""
+
+    def __init__(
+        self,
+        resource_type: str,
+        resource_id: int | None = None,
+        **extra_details,
+    ):
+        details: dict[str, Any] = {"resource_type": resource_type, **extra_details}
+
+        if resource_id is not None:
+            details[f"{resource_type}_id"] = resource_id
+            message = f"{resource_type.replace('_', ' ').title()} with ID {resource_id} not found"
+        else:
+            message = f"{resource_type.replace('_', ' ').title()} not found"
+
+        super().__init__(
+            message=message,
+            code=ErrorCode.RESOURCE_NOT_FOUND.code,
+            details=details,
+            status_code=ErrorCode.RESOURCE_NOT_FOUND.status,
         )
