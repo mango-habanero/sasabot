@@ -4,9 +4,16 @@ from src.configuration import app_logger
 from src.data.enums import ConversationState, MessageType
 from src.data.repositories import (
     BookingRepository,
+    BusinessRepository,
+    ConfigurationRepository,
     ConversationSessionRepository,
+    LocationRepository,
     MessageRepository,
+    PromotionRepository,
+    ServiceCategoryRepository,
+    ServiceRepository,
 )
+from src.services.business import ContextService, PricingService, PromotionService
 from src.services.conversation.handlers import (
     BookingConfirmHandler,
     BookingDateTimeHandler,
@@ -42,15 +49,33 @@ class ConversationService:
 
     def _register_handlers(self) -> None:
         """Register all state handlers with the state machine."""
+        session = self.session_repo.session
+        business_repo = BusinessRepository(session=session)
+        config_repo = ConfigurationRepository(session=session)
+        location_repo = LocationRepository(session=session)
+        category_repo = ServiceCategoryRepository(session=session)
+        service_repo = ServiceRepository(session=session)
+        promotion_repo = PromotionRepository(session=session)
+        pricing_service = PricingService(config_repo)
+
+        context_service = ContextService(
+            business_repository=business_repo,
+            configuration_repository=config_repo,
+            location_repository=location_repo,
+            service_category_repository=category_repo,
+            service_repository=service_repo,
+            promotion_repository=promotion_repo,
+        )
+
         # Register IDLE handler
         self.state_machine.register_handler(
             state=ConversationState.IDLE,
-            handler=IdleStateHandler(),
+            handler=IdleStateHandler(context_service=context_service),
         )
 
         self.state_machine.register_handler(
             state=ConversationState.BOOKING_SELECT_SERVICE,
-            handler=BookingSelectServiceHandler(),
+            handler=BookingSelectServiceHandler(context_service=context_service),
         )
 
         self.state_machine.register_handler(
@@ -61,7 +86,12 @@ class ConversationService:
         booking_repo = BookingRepository(self.session_repo.session)
         self.state_machine.register_handler(
             state=ConversationState.BOOKING_CONFIRM,
-            handler=BookingConfirmHandler(booking_repository=booking_repo),
+            handler=BookingConfirmHandler(
+                booking_repository=booking_repo,
+                context_service=context_service,
+                pricing_service=pricing_service,
+                promotion_service=PromotionService(promotion_repo, pricing_service),
+            ),
         )
 
         daraja_client = DarajaClient()
@@ -83,8 +113,9 @@ class ConversationService:
 
     async def handle_message(
         self,
-        phone_number: str,
+        business_id: int,
         message_content: str,
+        phone_number: str,
         customer_name: str | None = None,
     ) -> None:
         app_logger.info(
@@ -98,7 +129,7 @@ class ConversationService:
 
         # Explicit session creation if needed
         if not session:
-            session = self.session_repo.create(phone_number)
+            session = self.session_repo.create(business_id, phone_number)
             if not session:
                 app_logger.error(
                     "Failed to create conversation session",
@@ -320,7 +351,6 @@ class ConversationService:
                 )
                 return
 
-            # Save outbound message to database
             self.message_repo.save_outbound(
                 customer_phone=phone_number,
                 content=content,
