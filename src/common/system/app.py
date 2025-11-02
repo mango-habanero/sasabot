@@ -8,7 +8,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from src.api import api_router
 from src.configuration import settings
-from src.exceptions import (
+from src.exceptions.handlers import (
     generic_exception_handler,
     http_exception_handler,
     validation_exception_handler,

@@ -1,6 +1,7 @@
 """Repository for Booking entity operations."""
 
 from datetime import date
+from decimal import Decimal
 
 from sqlmodel import Session, col, select
 
@@ -10,14 +11,47 @@ from src.data.enums import BookingStatus, PaymentStatus
 
 
 class BookingRepository:
-    """Repository for Booking entity operations."""
-
     def __init__(self, session: Session):
         self.session = session
 
-    def create(self, booking_data: dict) -> Booking | None:
+    def create(
+        self,
+        business_id: int,
+        service_id: int,
+        booking_reference: str,
+        customer_phone: str,
+        customer_name: str | None,
+        service_category: str,
+        service_name: str,
+        service_duration: str,
+        appointment_date: date,
+        appointment_time,
+        appointment_datetime_display: str,
+        service_price: Decimal,
+        deposit_amount: Decimal,
+        balance_amount: Decimal,
+        total_amount: Decimal,
+        conversation_session_id: int | None = None,
+    ) -> Booking | None:
         try:
-            booking = Booking(**booking_data)
+            booking = Booking(
+                business_id=business_id,
+                service_id=service_id,
+                booking_reference=booking_reference,
+                customer_phone=customer_phone,
+                customer_name=customer_name,
+                service_category=service_category,
+                service_name=service_name,
+                service_duration=service_duration,
+                appointment_date=appointment_date,
+                appointment_time=appointment_time,
+                appointment_datetime_display=appointment_datetime_display,
+                service_price=service_price,
+                deposit_amount=deposit_amount,
+                balance_amount=balance_amount,
+                total_amount=total_amount,
+                conversation_session_id=conversation_session_id,
+            )
 
             self.session.add(booking)
             self.session.commit()
@@ -26,10 +60,12 @@ class BookingRepository:
             app_logger.info(
                 "Booking created",
                 booking_id=booking.id,
-                booking_reference=booking.booking_reference,
-                customer_phone=booking.customer_phone,
-                service_name=booking.service_name,
-                appointment_date=str(booking.appointment_date),
+                business_id=business_id,
+                service_id=service_id,
+                booking_reference=booking_reference,
+                customer_phone=customer_phone,
+                service_name=service_name,
+                appointment_date=str(appointment_date),
             )
             return booking
 
@@ -38,9 +74,13 @@ class BookingRepository:
             app_logger.error(
                 "Failed to create booking",
                 error=str(e),
-                booking_data=booking_data,
+                business_id=business_id,
+                booking_reference=booking_reference,
             )
             return None
+
+    def get_by_id(self, booking_id: int) -> Booking | None:
+        return self.session.get(Booking, booking_id)
 
     def get_by_reference(self, reference: str) -> Booking | None:
         statement = select(Booking).where(Booking.booking_reference == reference)
@@ -51,9 +91,6 @@ class BookingRepository:
             Booking.mpesa_checkout_request_id == checkout_request_id
         )
         return self.session.exec(statement).first()
-
-    def get_by_id(self, booking_id: int) -> Booking | None:
-        return self.session.get(Booking, booking_id)
 
     def get_by_phone(self, phone_number: str, limit: int = 10) -> list[Booking]:
         statement = (
@@ -95,7 +132,6 @@ class BookingRepository:
         if receipt_number:
             booking.mpesa_receipt_number = receipt_number
 
-        # If payment successful, update booking status and timestamp
         if status == PaymentStatus.PAID:
             booking.booking_status = BookingStatus.CONFIRMED
             from datetime import datetime, timezone

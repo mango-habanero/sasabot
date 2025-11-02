@@ -5,27 +5,13 @@ import json
 from src.configuration import app_logger
 from src.data.dtos.internal.intent import Intent
 from src.data.enums.intent import IntentType
-from src.services.llm.business_context import (
-    BUSINESS_INFO,
-    format_promotions_for_prompt,
-    format_services_for_prompt,
-)
 from src.services.llm.client import LLMService
 
 
-def _build_system_prompt() -> str:
-    """
-    Build system prompt with business context.
+def build_system_prompt(business_context: str) -> str:
+    return f"""You are an AI assistant for a beauty salon business.
 
-    :return: Complete system prompt for intent recognition
-    """
-    return f"""You are an AI assistant for Glow Haven Beauty Lounge, a beauty salon in Nairobi.
-
-{BUSINESS_INFO}
-
-Services Offered:{format_services_for_prompt()}
-
-{format_promotions_for_prompt()}
+{business_context}
 
 Your task is to analyze customer messages and determine their intent. Classify messages into one of these intents:
 
@@ -91,38 +77,36 @@ class IntentRecognitionService:
     """Service for recognizing user intents from messages."""
 
     def __init__(self):
-        """Initialize intent recognition service."""
         self.llm_service = LLMService()
-        self.system_prompt = _build_system_prompt()
 
     async def recognize_intent(
         self,
         message: str,
+        business_context: str,
         conversation_history: list[str] | None = None,
     ) -> Intent:
         app_logger.info("Recognizing intent", message_preview=message[:50])
         response_text = None
-        # Build message context
+
+        system_prompt = build_system_prompt(business_context)
+
         user_message = f"Customer message: {message}"
         if conversation_history:
-            history_text = "\n".join(conversation_history[-3:])  # Last 3 messages
+            history_text = "\n".join(conversation_history[-3:])
             user_message = f"Recent conversation:\n{history_text}\n\n{user_message}"
 
         messages = [{"role": "user", "content": user_message}]
 
         try:
-            # Get LLM response in JSON mode
             response_text = await self.llm_service.complete(
                 messages=messages,
-                system_prompt=self.system_prompt,
-                temperature=0.3,  # Lower temperature for more consistent classification
+                system_prompt=system_prompt,
+                temperature=0.3,
                 max_tokens=500,
             )
 
-            # Parse JSON response
             response_data = json.loads(response_text)
 
-            # Map string intent to enum
             intent_type_str = response_data.get("intent_type", "UNKNOWN")
             try:
                 intent_type = IntentType[intent_type_str]
@@ -155,7 +139,6 @@ class IntentRecognitionService:
                 error=str(e),
                 response_preview=response_text[:100] if response_text else None,
             )
-            # Return UNKNOWN intent on parsing error
             return Intent(
                 type=IntentType.UNKNOWN,
                 confidence=0.0,
@@ -169,7 +152,6 @@ class IntentRecognitionService:
                 error=str(e),
                 error_type=type(e).__name__,
             )
-            # Return UNKNOWN intent on any error
             return Intent(
                 type=IntentType.UNKNOWN,
                 confidence=0.0,

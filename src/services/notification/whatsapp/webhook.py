@@ -5,25 +5,25 @@ from datetime import datetime, timezone
 from sqlmodel import Session
 
 from src.configuration import app_logger
-from src.data.dtos import WebhookPayload
-from src.data.entities.message import Message
+from src.data.dtos.requests import WebhookPayload
+from src.data.entities import Message
 from src.data.enums import MessageDirection
-from src.data.repositories import MessageRepository
+from src.data.enums.business import BusinessStatus
+from src.data.repositories.business import BusinessRepository
 from src.data.repositories.conversation_session import ConversationSessionRepository
+from src.data.repositories.message import MessageRepository
 from src.services.conversation.service import ConversationService
 from src.services.notification.whatsapp.client import WhatsAppClient
 
 
 class WebhookService:
-    """Service for processing WhatsApp webhooks."""
-
     def __init__(self, session: Session):
         self.session = session
         self.message_repo = MessageRepository(session)
         self.session_repo = ConversationSessionRepository(session)
+        self.business_repo = BusinessRepository(session)
         self.whatsapp_client = WhatsAppClient()
 
-        # Initialize conversation service
         self.conversation_service = ConversationService(
             session_repository=self.session_repo,
             message_repository=self.message_repo,
@@ -31,20 +31,38 @@ class WebhookService:
         )
 
     async def process_webhook(self, payload: WebhookPayload) -> int:
-        """
-        Process incoming WhatsApp webhook.
+        phone_number_id = payload.extract_phone_number_id()
+        if not phone_number_id:
+            app_logger.warning("Webhook received without phone_number_id")
+            return 0
 
-        Saves inbound messages and delegates to ConversationService for response.
+        business = self.business_repo.get_by_whatsapp_number_id(phone_number_id)
+        if not business:
+            app_logger.warning(
+                "Business not found for phone_number_id, skipping webhook",
+                phone_number_id=phone_number_id,
+            )
+            return 0
 
-        :param payload: Webhook payload from WhatsApp
-        :type payload: WebhookPayload
-        :return: Number of new messages processed
-        :rtype: int
-        """
+        if business.status != BusinessStatus.ACTIVE:
+            app_logger.warning(
+                "Business is not active, skipping webhook",
+                business_id=business.id,
+                business_status=business.status.value,
+                phone_number_id=phone_number_id,
+            )
+            return 0
+
+        app_logger.info(
+            "Processing webhook for business",
+            business_id=business.id,
+            business_name=business.name,
+            phone_number_id=phone_number_id,
+        )
+
         messages = payload.extract_messages()
         contacts = payload.extract_contacts()
 
-        # build contact map for a quick lookup
         contact_map = {
             contact.wa_id: contact.profile.get("name") for contact in contacts
         }
@@ -52,12 +70,10 @@ class WebhookService:
         processed_count = 0
 
         for webhook_msg in messages:
-            # convert WhatsApp timestamp (unix seconds) to datetime
             whatsapp_ts = datetime.fromtimestamp(
                 int(webhook_msg.timestamp), tz=timezone.utc
             )
 
-            # create message entity
             message = Message(
                 external_id=webhook_msg.id,
                 customer_phone=webhook_msg.sender_phone,
@@ -65,41 +81,50 @@ class WebhookService:
                 direction=MessageDirection.INBOUND,
                 message_type=webhook_msg.type,
                 content=webhook_msg.content,
-                status=None,  # Inbound messages don't have status
+                status=None,
                 whatsapp_timestamp=whatsapp_ts,
             )
 
             saved = self.message_repo.save(message)
-            if saved:
-                processed_count += 1
-                app_logger.info(
-                    "Webhook message processed",
+            if not saved:
+                app_logger.warning(
+                    "Failed to save message (likely duplicate)",
+                    external_id=webhook_msg.id,
+                    customer_phone=webhook_msg.sender_phone,
+                )
+                continue
+
+            processed_count += 1
+            app_logger.info(
+                "Webhook message saved",
+                message_id=saved.id,
+                customer_phone=saved.customer_phone,
+                message_type=saved.message_type,
+            )
+
+            try:
+                await self.conversation_service.handle_message(
+                    phone_number=webhook_msg.sender_phone,
+                    message_content=webhook_msg.content,
+                    business_id=business.id,
+                    customer_name=contact_map.get(webhook_msg.sender_phone),
+                )
+            except Exception as e:
+                app_logger.error(
+                    "Failed to handle message in conversation service",
                     message_id=saved.id,
                     customer_phone=saved.customer_phone,
-                    message_type=saved.message_type,
+                    business_id=business.id,
+                    error=str(e),
+                    exc_info=True,
                 )
-
-                # delegate to ConversationService to handle message and respond
-                try:
-                    await self.conversation_service.handle_message(
-                        phone_number=webhook_msg.sender_phone,
-                        message_content=webhook_msg.content,
-                        customer_name=contact_map.get(webhook_msg.sender_phone),
-                    )
-                except Exception as e:
-                    app_logger.error(
-                        "Failed to handle message in conversation service",
-                        message_id=saved.id,
-                        customer_phone=saved.customer_phone,
-                        error=str(e),
-                    )
-                    # continue processing other messages even if one fails
 
         app_logger.info(
             "Webhook processing complete",
+            business_id=business.id,
             total_messages=len(messages),
-            new_messages=processed_count,
-            duplicates=len(messages) - processed_count,
+            processed_messages=processed_count,
+            skipped_messages=len(messages) - processed_count,
         )
 
         return processed_count

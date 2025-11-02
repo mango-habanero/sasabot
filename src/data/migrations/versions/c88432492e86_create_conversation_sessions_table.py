@@ -1,8 +1,8 @@
-"""create a conversation_sessions table.
+"""create conversation sessions table.
 
-Revision ID: 4468244ef687
-Revises: f6f1743d252a
-Create Date: 2025-10-30 07:56:32.385266
+Revision ID: c88432492e86
+Revises:
+Create Date: 2025-11-01 18:18:08.003394
 
 """
 
@@ -13,8 +13,8 @@ from alembic import op
 from sqlmodel import AutoString
 
 # revision identifiers, used by Alembic.
-revision: str = "4468244ef687"
-down_revision: Union[str, Sequence[str], None] = "f6f1743d252a"
+revision: str = "c88432492e86"
+down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -66,6 +66,5 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f("ix_conversation_sessions_id"))
 
     op.drop_table("conversation_sessions")
-
-    sa.Enum(name="conversationstate").drop(op.get_bind(), checkfirst=True)
+    sa.Enum(name="conversationstate").drop(op.get_bind(), checkfirst=False)
     # ### end Alembic commands ###

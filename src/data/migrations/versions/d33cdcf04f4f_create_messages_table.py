@@ -1,8 +1,8 @@
 """create messages table.
 
-Revision ID: f6f1743d252a
-Revises:
-Create Date: 2025-10-30 07:51:58.381992
+Revision ID: d33cdcf04f4f
+Revises: 1ea5125e4487
+Create Date: 2025-11-01 18:26:13.211128
 
 """
 
@@ -13,8 +13,8 @@ from alembic import op
 from sqlmodel import AutoString
 
 # revision identifiers, used by Alembic.
-revision: str = "f6f1743d252a"
-down_revision: Union[str, Sequence[str], None] = None
+revision: str = "d33cdcf04f4f"
+down_revision: Union[str, Sequence[str], None] = "1ea5125e4487"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -67,8 +67,7 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f("ix_messages_customer_phone"))
 
     op.drop_table("messages")
-
-    sa.Enum(name="messagedirection").drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name="messagetype").drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name="messagestatus").drop(op.get_bind(), checkfirst=True)
+    sa.Enum(name="messagetype").drop(op.get_bind(), checkfirst=False)
+    sa.Enum(name="messagedirection").drop(op.get_bind(), checkfirst=False)
+    sa.Enum(name="messagestatus").drop(op.get_bind(), checkfirst=False)
     # ### end Alembic commands ###

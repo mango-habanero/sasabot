@@ -121,6 +121,15 @@ class WebhookPayload(BaseModel):
     object: str  # Should be "whatsapp_business_account"
     entry: list[WebhookEntry]
 
+    def extract_contacts(self) -> list[WebhookContact]:
+        """Extract all contacts from the webhook payload."""
+        contacts: list[WebhookContact] = []
+        for entry in self.entry:
+            for change in entry.changes:
+                if change.field == "messages" and change.value.contacts:
+                    contacts.extend(change.value.contacts)
+        return contacts
+
     def extract_messages(self) -> list[WebhookMessage]:
         """Extract all messages from the webhook payload."""
         messages: list[WebhookMessage] = []
@@ -130,6 +139,14 @@ class WebhookPayload(BaseModel):
                     messages.extend(change.value.messages)
         return messages
 
+    def extract_phone_number_id(self) -> str | None:
+        """Extract phone_number_id from webhook metadata."""
+        if self.entry and self.entry[0].changes:
+            for change in self.entry[0].changes:
+                if change.field == "messages" and change.value.metadata:
+                    return change.value.metadata.phone_number_id
+        return None
+
     def extract_statuses(self) -> list[WebhookStatus]:
         """Extract all status updates from the webhook payload."""
         statuses: list[WebhookStatus] = []
@@ -138,12 +155,3 @@ class WebhookPayload(BaseModel):
                 if change.field == "messages" and change.value.statuses:
                     statuses.extend(change.value.statuses)
         return statuses
-
-    def extract_contacts(self) -> list[WebhookContact]:
-        """Extract all contacts from the webhook payload."""
-        contacts: list[WebhookContact] = []
-        for entry in self.entry:
-            for change in entry.changes:
-                if change.field == "messages" and change.value.contacts:
-                    contacts.extend(change.value.contacts)
-        return contacts

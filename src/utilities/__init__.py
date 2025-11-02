@@ -10,10 +10,22 @@ from .datetime import (
     parse_time_id,
 )
 from .phone_number import is_safaricom_number, normalize_phone_number
+from .prompt_formatting import (
+    format_business_info,
+    format_complete_context,
+    format_operating_hours,
+    format_promotions,
+    format_services,
+)
 
 __all__ = [
     "calculate_deposit",
+    "format_business_info",
+    "format_complete_context",
     "format_datetime_display",
+    "format_operating_hours",
+    "format_promotions",
+    "format_services",
     "generate_booking_reference",
     "generate_date_id",
     "generate_time_id",

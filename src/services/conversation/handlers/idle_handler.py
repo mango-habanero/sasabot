@@ -4,16 +4,17 @@ from src.configuration import app_logger
 from src.data.entities.conversation_session import ConversationSession
 from src.data.enums.conversation import ConversationState
 from src.data.enums.intent import IntentType
+from src.services.business import ContextService
 from src.services.conversation.handlers.base import BaseStateHandler
-from src.services.llm.business_context import (
-    PROMOTIONS,
-    SERVICES,
-)
 from src.services.llm.intent_service import IntentRecognitionService
+from src.utilities import (
+    format_complete_context,
+    format_operating_hours,
+    format_promotions,
+)
 
 
 def _handle_low_confidence(customer_name: str | None) -> dict:
-    """Handle a low-confidence intent recognition."""
     greeting = f"{customer_name}" if customer_name else "there"
     return {
         "text": f"Hi {greeting}! I'd love to help, but I'm not quite sure what you're asking. "
@@ -26,7 +27,6 @@ def _handle_low_confidence(customer_name: str | None) -> dict:
 
 
 def _handle_booking_intent(customer_name: str | None) -> dict:
-    """Handle booking appointment intent."""
     greeting = f"Great, {customer_name}!" if customer_name else "Great!"
     return {
         "text": f"{greeting} Let's book your appointment. "
@@ -35,59 +35,80 @@ def _handle_booking_intent(customer_name: str | None) -> dict:
     }
 
 
-def _handle_general_inquiry(intent, customer_name: str | None) -> dict:
-    """Handle general inquiry - return pre-formatted responses."""
-
-    # Check what type of general inquiry
+def _handle_general_inquiry(
+    intent,
+    customer_name: str | None,
+    business_id: int,
+    context_service: ContextService,
+) -> dict:
     message_lower = intent.reasoning.lower() if intent.reasoning else ""
 
-    # Hour inquiry
     if any(word in message_lower for word in ["hour", "open", "time", "when"]):
+        location = context_service.get_primary_location(business_id)
+        hours_formatted = format_operating_hours(location.operating_hours)
         return {
-            "text": "We're open every day! 🕐\n\n"
-            "**Operating Hours:**\n"
-            "Monday – Sunday: 8:00 AM – 7:30 PM\n\n"
-            "We're here to serve you 7 days a week!"
+            "text": f"We're open every day! 🕐\n\n"
+            f"**Operating Hours:**\n"
+            f"{hours_formatted}\n\n"
+            f"We're here to serve you 7 days a week!"
         }
 
-    # Location inquiry
     if any(word in message_lower for word in ["location", "where", "address", "find"]):
-        return {
-            "text": "📍 **Our Location:**\n"
-            "1st Floor, Valley Arcade Mall, Nairobi\n\n"
-            "**Contact Us:**\n"
-            "📞 +254 712 345 678\n"
-            "📧 info@glowhavenbeauty.co.ke\n"
-            "📱 Instagram: @glowhavenbeautylounge"
-        }
+        business = context_service.get_business(business_id)
+        location = context_service.get_primary_location(business_id)
 
-    # Promotions inquiry
+        contact_lines = [
+            f"📍 **Our Location:**\n{location.address}\n",
+            "\n**Contact Us:**",
+        ]
+
+        if business.phone:
+            contact_lines.append(f"📞 {business.phone}")
+        if business.email:
+            contact_lines.append(f"📧 {business.email}")
+        if business.instagram_handle:
+            contact_lines.append(f"📱 Instagram: @{business.instagram_handle}")
+
+        return {"text": "\n".join(contact_lines)}
+
     if any(
         word in message_lower
         for word in ["promo", "deal", "discount", "offer", "special"]
     ):
-        promo_text = "🎉 **Current Promotions:**\n\n"
-        for promo in PROMOTIONS:
-            promo_text += f"**{promo['name']}**\n"
-            promo_text += f"{promo['description']}\n"
-            promo_text += f"Valid: {promo['valid_until']}\n\n"
-        return {"text": promo_text}
+        promotions = context_service.get_active_promotions(business_id)
+        if not promotions:
+            return {
+                "text": "We don't have any active promotions at the moment. Check back soon!"
+            }
 
-    # Services overview
+        promo_text = format_promotions(promotions)
+        return {"text": f"🎉 {promo_text}"}
+
     if any(word in message_lower for word in ["service", "what do you", "offer"]):
+        categories = context_service.get_categories(business_id)
+        services = context_service.get_all_services(business_id)
+
+        if not services:
+            return {"text": "We're updating our services. Please check back soon!"}
+
         services_text = "✨ **Our Services:**\n\n"
-        for category in SERVICES.keys():
-            services_text += f"• {category}\n"
+        for category in categories:
+            services_text += f"• {category.name}\n"
+
+        prices = [service.price for service in services]
+        min_price = min(prices)
+        max_price = max(prices)
+
         services_text += (
-            "\n💰 Prices range from KES 700 - 3,500\n"
-            "Would you like to see specific service prices or book an appointment?"
+            f"\n💰 Prices range from KES {min_price:,.2f} - {max_price:,.2f}\n"
+            f"Would you like to see specific service prices or book an appointment?"
         )
         return {"text": services_text}
 
-    # Default general response
     greeting = f"Hi {customer_name}!" if customer_name else "Hello!"
+    business = context_service.get_business(business_id)
     return {
-        "text": f"{greeting} Welcome to Glow Haven Beauty Lounge! 🌟\n\n"
+        "text": f"{greeting} Welcome to {business.name}! 🌟\n\n"
         f"I can help you with:\n"
         f"• Booking appointments\n"
         f"• Viewing our services and prices\n"
@@ -97,40 +118,52 @@ def _handle_general_inquiry(intent, customer_name: str | None) -> dict:
     }
 
 
-def _handle_price_check(intent) -> dict:
-    """Handle price check inquiry."""
+def _handle_price_check(
+    intent, business_id: int, context_service: ContextService
+) -> dict:
     entities = intent.entities or {}
     service_category = entities.get("service_category", "").lower()
 
-    # If specific category mentioned, show that category
+    categories = context_service.get_categories(business_id)
+    all_services = context_service.get_all_services(business_id)
+
     if service_category:
-        for category, services in SERVICES.items():
-            if service_category in category.lower():
-                price_text = f"💰 **{category} Prices:**\n\n"
-                for service in services:
+        for category in categories:
+            if service_category in category.name.lower():
+                category_services = [
+                    s for s in all_services if s.category_id == category.id
+                ]
+                if not category_services:
+                    continue
+
+                price_text = f"💰 **{category.name} Prices:**\n\n"
+                for service in category_services:
                     price_text += (
-                        f"• {service['name']}: KES {service['price']:,} "
-                        f"({service['duration']})\n"
+                        f"• {service.name}: KES {service.price:,.2f} "
+                        f"({service.duration_minutes} mins)\n"
                     )
                 price_text += "\nWould you like to book any of these services?"
                 return {"text": price_text}
 
-    # Show all prices
     price_text = "💰 **Our Service Prices:**\n\n"
-    for category, services in SERVICES.items():
-        price_text += f"**{category}:**\n"
-        for service in services:
+    for category in categories:
+        category_services = [s for s in all_services if s.category_id == category.id]
+        if not category_services:
+            continue
+
+        price_text += f"**{category.name}:**\n"
+        for service in category_services:
             price_text += (
-                f"• {service['name']}: KES {service['price']:,} "
-                f"({service['duration']})\n"
+                f"• {service.name}: KES {service.price:,.2f} "
+                f"({service.duration_minutes} mins)\n"
             )
         price_text += "\n"
+
     price_text += "Ready to book? Just let me know! 💅"
     return {"text": price_text}
 
 
 def _handle_feedback_intent(customer_name: str | None) -> dict:
-    """Handle feedback intent - transition to feedback flow."""
     greeting = f"Thank you, {customer_name}!" if customer_name else "Thank you!"
     return {
         "text": f"{greeting} We value your feedback. "
@@ -139,23 +172,24 @@ def _handle_feedback_intent(customer_name: str | None) -> dict:
     }
 
 
-def _handle_payment_inquiry() -> dict:
-    """Handle payment-related inquiry."""
+def _handle_payment_inquiry(business_id: int, context_service: ContextService) -> dict:
+    config = context_service.get_configuration(business_id)
+
+    payment_methods = config.accepted_payment_methods
+    methods_text = "\n".join([f"• {method.title()}" for method in payment_methods])
+
     return {
-        "text": "💳 **Payment Information:**\n\n"
-        "We accept the following payment methods:\n"
-        "• M-Pesa (Pochi la Biashara)\n"
-        "• Visa & Mastercard\n"
-        "• Cash\n\n"
-        "**Booking Policy:**\n"
-        "A 30% deposit is required to confirm your appointment. "
-        "You can pay the deposit via M-Pesa when booking.\n\n"
-        "Would you like to book an appointment?"
+        "text": f"💳 **Payment Information:**\n\n"
+        f"We accept the following payment methods:\n"
+        f"{methods_text}\n\n"
+        f"**Booking Policy:**\n"
+        f"A {config.deposit_percentage:.0f}% deposit is required to confirm your appointment. "
+        f"You can pay the deposit via M-Pesa when booking.\n\n"
+        f"Would you like to book an appointment?"
     }
 
 
 def _handle_unknown_intent(customer_name: str | None) -> dict:
-    """Handle unknown intent."""
     greeting = f"{customer_name}" if customer_name else "there"
     return {
         "text": f"Hi {greeting}! I'm not sure I understood that. "
@@ -170,10 +204,8 @@ def _handle_unknown_intent(customer_name: str | None) -> dict:
 
 
 class IdleStateHandler(BaseStateHandler):
-    """Handler for IDLE state - uses LLM intent recognition for routing."""
-
-    def __init__(self):
-        """Initialize handler with intent recognition service."""
+    def __init__(self, context_service: ContextService):
+        self.context_service = context_service
         self.intent_service = IntentRecognitionService()
 
     async def handle(
@@ -182,15 +214,32 @@ class IdleStateHandler(BaseStateHandler):
         message_content: str,
         customer_name: str | None = None,
     ) -> dict:
+        business_id = session.business_id
+
         app_logger.info(
             "Handling IDLE state with intent recognition",
             session_id=session.id,
+            business_id=business_id,
             phone_number=session.phone_number,
             message_preview=message_content[:50],
         )
 
-        # Recognize intent from a message
-        intent = await self.intent_service.recognize_intent(message_content)
+        # Get business context for LLM
+        business = self.context_service.get_business(business_id)
+        location = self.context_service.get_primary_location(business_id)
+        categories = self.context_service.get_categories(business_id)
+        services = self.context_service.get_all_services(business_id)
+        promotions = self.context_service.get_active_promotions(business_id)
+
+        business_context = format_complete_context(
+            business, location, categories, services, promotions
+        )
+
+        # Recognize intent with business context
+        intent = await self.intent_service.recognize_intent(
+            message_content,
+            business_context=business_context,
+        )
 
         app_logger.info(
             "Intent recognized in IDLE handler",
@@ -199,25 +248,25 @@ class IdleStateHandler(BaseStateHandler):
             confidence=intent.confidence,
         )
 
-        # Check if clarification needed (low confidence)
         if intent.confidence < 0.7:
             return _handle_low_confidence(customer_name)
 
-        # Route based on intent type
         if intent.type == IntentType.BOOK_APPOINTMENT:
             return _handle_booking_intent(customer_name)
 
         elif intent.type == IntentType.GENERAL_INQUIRY:
-            return _handle_general_inquiry(intent, customer_name)
+            return _handle_general_inquiry(
+                intent, customer_name, business_id, self.context_service
+            )
 
         elif intent.type == IntentType.PRICE_CHECK:
-            return _handle_price_check(intent)
+            return _handle_price_check(intent, business_id, self.context_service)
 
         elif intent.type == IntentType.FEEDBACK:
             return _handle_feedback_intent(customer_name)
 
         elif intent.type == IntentType.PAYMENT_RELATED:
-            return _handle_payment_inquiry()
+            return _handle_payment_inquiry(business_id, self.context_service)
 
-        else:  # UNKNOWN
+        else:
             return _handle_unknown_intent(customer_name)

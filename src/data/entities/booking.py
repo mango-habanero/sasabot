@@ -1,8 +1,9 @@
 """Booking entity for appointment management."""
 
 from datetime import date, datetime, time
+from decimal import Decimal
 
-from sqlalchemy import Column, Date, Enum, Time
+from sqlalchemy import Column, Date, Enum, Numeric, Time
 from sqlmodel import Field
 
 from src.data.entities import Base, IDMixin, TimestampMixin
@@ -12,6 +13,20 @@ from src.data.enums import BookingStatus, PaymentStatus
 class Booking(Base, IDMixin, TimestampMixin, table=True):
     __tablename__ = "bookings"
 
+    # Foreign Key References (nullable for soft delete support)
+    business_id: int | None = Field(
+        default=None,
+        foreign_key="businesses.id",
+        index=True,
+        ondelete="SET NULL",
+    )
+    service_id: int | None = Field(
+        default=None,
+        foreign_key="services.id",
+        index=True,
+        ondelete="SET NULL",
+    )
+
     # Booking Reference
     booking_reference: str = Field(unique=True, index=True, max_length=20)
 
@@ -19,7 +34,7 @@ class Booking(Base, IDMixin, TimestampMixin, table=True):
     customer_phone: str = Field(index=True, max_length=20)
     customer_name: str | None = Field(default=None, max_length=255)
 
-    # Service Details
+    # Service Details (Denormalized for historical record)
     service_category: str = Field(max_length=100)
     service_name: str = Field(max_length=255)
     service_duration: str = Field(max_length=50)
@@ -30,10 +45,10 @@ class Booking(Base, IDMixin, TimestampMixin, table=True):
     appointment_datetime_display: str = Field(max_length=255)
 
     # Financial Details
-    service_price: int
-    deposit_amount: int
-    balance_amount: int
-    total_amount: int
+    service_price: Decimal = Field(sa_column=Column(Numeric(10, 2)))
+    deposit_amount: Decimal = Field(sa_column=Column(Numeric(10, 2)))
+    balance_amount: Decimal = Field(sa_column=Column(Numeric(10, 2)))
+    total_amount: Decimal = Field(sa_column=Column(Numeric(10, 2)))
 
     # Status Tracking
     payment_status: PaymentStatus = Field(
