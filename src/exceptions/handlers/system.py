@@ -7,10 +7,9 @@ from fastapi import Request
 from fastapi.exceptions import HTTPException, RequestValidationError
 from starlette.responses import JSONResponse
 
+from src.configuration import app_logger
 from src.data.dtos.responses import ErrorDetail, ErrorResponse
 from src.data.enums import ErrorCode
-
-logger = logging.getLogger(__name__)
 
 
 async def http_exception_handler(
@@ -19,7 +18,7 @@ async def http_exception_handler(
 ) -> JSONResponse:
     assert isinstance(exc, HTTPException)
     error_reference = uuid4().hex
-    logger.error(
+    app_logger.error(
         "HTTP error | Status: %s | Detail: %s | Ref: %s",
         exc.status_code,
         exc.detail,
@@ -62,7 +61,7 @@ async def validation_exception_handler(_: Request, exc: Exception) -> JSONRespon
         for error in exc.errors()
     ]
 
-    logger.warning(
+    app_logger.warning(
         "Validation error | Ref: %s | Errors: %d",
         error_reference,
         len(errors),
@@ -82,7 +81,7 @@ async def validation_exception_handler(_: Request, exc: Exception) -> JSONRespon
 
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     error_reference = uuid4().hex
-    logger.exception(
+    app_logger.exception(
         "Unexpected error | Ref: %s | Path: %s",
         error_reference,
         request.url.path,
