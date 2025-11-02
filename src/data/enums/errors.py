@@ -15,6 +15,11 @@ class ErrorCode(Enum):
         "Request contains invalid or incomplete arguments.",
         HTTPStatus.BAD_REQUEST,
     )
+    INVALID_STATE_TRANSITION = (
+        "INVALID_STATE_TRANSITION",
+        "The requested operation cannot be performed in the current state.",
+        HTTPStatus.BAD_REQUEST,
+    )
     RESOURCE_NOT_FOUND = (
         "RESOURCE_NOT_FOUND",
         "The specified resource does not exist.",
