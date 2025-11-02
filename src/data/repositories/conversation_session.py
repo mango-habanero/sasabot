@@ -18,29 +18,17 @@ class ConversationSessionRepository:
 
     def create(
         self,
+        business_id: int,
         phone_number: str,
-        state: ConversationState = ConversationState.IDLE,
         context: dict | None = None,
+        state: ConversationState = ConversationState.IDLE,
     ) -> ConversationSession | None:
-        """
-        Create a new conversation session.
-
-        Returns None if a session already exists for this phone number.
-
-        :param phone_number: Customer phone number in E.164 format
-        :type phone_number: str
-        :param state: Initial conversation state (default: IDLE)
-        :type state: ConversationState
-        :param context: Initial context data (default: empty dict)
-        :type context: dict | None
-        :return: Created session or None if duplicate
-        :rtype: ConversationSession | None
-        """
         try:
             session = ConversationSession(
+                context=context or {},
+                business_id=business_id,
                 phone_number=phone_number,
                 state=state,
-                context=context or {},
             )
 
             self.session.add(session)
@@ -49,8 +37,9 @@ class ConversationSessionRepository:
 
             app_logger.info(
                 "Conversation session created",
-                session_id=session.id,
+                business_id=business_id,
                 phone_number=phone_number,
+                session_id=session.id,
                 state=state.value,
             )
             return session
@@ -72,12 +61,6 @@ class ConversationSessionRepository:
             return None
 
     def get_by_phone(self, phone_number: str) -> ConversationSession | None:
-        """
-        Retrieve a conversation session by phone number.
-
-        :param phone_number: Customer phone number
-        :return: ConversationSession or None if not found
-        """
         statement = select(ConversationSession).where(
             ConversationSession.phone_number == phone_number
         )
@@ -88,13 +71,6 @@ class ConversationSessionRepository:
         session_id: int,
         new_state: ConversationState,
     ) -> bool:
-        """
-        Update conversation state.
-
-        :param session_id: Session ID
-        :param new_state: New conversation states
-        :return: True if updated, False if session not found
-        """
         session = self.session.get(ConversationSession, session_id)
         if not session:
             app_logger.warning(
@@ -119,15 +95,6 @@ class ConversationSessionRepository:
         session_id: int,
         context: dict,
     ) -> bool:
-        """
-        Update conversation context (replaces existing context).
-
-        :param session_id: Session ID
-        :type session_id: int
-        :param context: New context data
-
-        :return: True if updated, False if session not found
-        """
         session = self.session.get(ConversationSession, session_id)
         if not session:
             app_logger.warning(
@@ -152,16 +119,6 @@ class ConversationSessionRepository:
         session_id: int,
         context_updates: dict,
     ) -> bool:
-        """
-        Merge new data into an existing context (doesn't replace).
-
-        :param session_id: Session ID
-        :type session_id: int
-        :param context_updates: Data to merge into an existing context
-        :type context_updates: dict
-        :return: True if updated, False if session not found
-        :rtype: bool
-        """
         session = self.session.get(ConversationSession, session_id)
         if not session:
             app_logger.warning(
