@@ -91,6 +91,142 @@ class PaymentInitiatedHandler(BaseStateHandler):
             },
         }
 
+    async def _cancel_booking_due_to_validation_failure(
+        self,
+        context: dict,
+        customer_name: str | None = None,
+    ) -> dict:
+        booking_id = context.get("booking_id")
+
+        if booking_id:
+            self.booking_repo.cancel_booking(booking_id)
+            app_logger.info(
+                "Booking cancelled due to validation failure",
+                booking_id=booking_id,
+            )
+
+        greeting = f"{customer_name}" if customer_name else "there"
+
+        message = (
+            f"Sorry {greeting}, we couldn't verify a valid M-Pesa number.\n\n"
+            f"Your booking has been cancelled.\n\n"
+            f"If you'd like to try again, please start a new booking "
+            f"or contact us directly:\n"
+            f"📞 +254 712 345 678\n"
+            f"📧 info@glowhavenbeauty.co.ke"
+        )
+
+        return {
+            "text": message,
+            "update_context": {},
+            "transition_to": ConversationState.IDLE,
+        }
+
+    async def _initiate_stk_push(
+        self,
+        session: ConversationSession,
+        context: dict,
+        payment_phone: str,
+    ) -> dict:
+        booking_id = context.get("booking_id")
+        booking_reference = context.get("booking_reference")
+        deposit_amount = context.get("deposit_amount")
+
+        if not all([booking_id, booking_reference, deposit_amount]):
+            app_logger.error(
+                "Missing booking details in context",
+                session_id=session.id,
+                context=context,
+            )
+            return {
+                "text": "I apologize, but something went wrong. "
+                "Please start your booking again by typing 'book'.",
+                "update_context": {},
+                "transition_to": ConversationState.IDLE,
+            }
+
+        # Type assertions after validation
+        assert isinstance(booking_id, int), "booking_id must be an integer"
+        assert isinstance(booking_reference, str), "booking_reference must be a string"
+        assert isinstance(deposit_amount, (int, float)), (
+            "deposit_amount must be a number"
+        )
+
+        booking = self.booking_repo.get_by_id(booking_id)
+        if not booking:
+            app_logger.error(
+                "Booking not found",
+                session_id=session.id,
+                booking_id=booking_id,
+            )
+            return {
+                "text": "I apologize, but I couldn't find your booking. "
+                "Please start again by typing 'book'.",
+                "update_context": {},
+                "transition_to": ConversationState.IDLE,
+            }
+
+        # Prepare STK push parameters
+        account_reference = booking_reference
+        transaction_desc = f"Deposit for {booking.service_name}"
+        callback_url = settings.DARAJA_CALLBACK_URL
+
+        app_logger.info(
+            "Initiating STK push",
+            booking_id=booking_id,
+            booking_reference=booking_reference,
+            amount=deposit_amount,
+            payment_phone=payment_phone,
+        )
+
+        try:
+            # Initiate STK push
+            stk_response = await self.daraja_client.initiate_stk_push(
+                customer_phone=payment_phone,
+                amount=int(deposit_amount),  # Ensure it's an int
+                account_reference=account_reference,
+                transaction_desc=transaction_desc,
+                callback_url=callback_url,
+            )
+
+            # Update booking with CheckoutRequestID
+            booking.mpesa_checkout_request_id = stk_response.checkout_request_id
+            self.booking_repo.session.commit()
+
+            app_logger.info(
+                "STK push initiated successfully",
+                booking_id=booking_id,
+                checkout_request_id=stk_response.checkout_request_id,
+            )
+
+            message = (
+                f"📱 **Payment Request Sent!**\n\n"
+                f"Please check your phone for an M-Pesa payment prompt.\n\n"
+                f"💰 Amount: KES {deposit_amount:,}\n"
+                f"📋 Reference: {booking_reference}\n\n"
+                f"Enter your M-Pesa PIN to complete the payment.\n\n"
+                f"⏱️ The prompt will expire in 60 seconds."
+            )
+
+            return {
+                "text": message,
+                "transition_to": ConversationState.PAYMENT_PENDING,
+            }
+
+        except Exception as e:
+            app_logger.error(
+                "Failed to initiate STK push",
+                booking_id=booking_id,
+                error=str(e),
+            )
+
+            return {
+                "text": "I apologize, but we couldn't send the payment request. "
+                "Please try again or contact us directly:\n"
+                "📞 +254 712 345 678",
+                "transition_to": ConversationState.IDLE,
+            }
+
     async def _validate_and_initiate_payment(
         self,
         session: ConversationSession,
@@ -168,136 +304,4 @@ class PaymentInitiatedHandler(BaseStateHandler):
             "update_context": {
                 "mpesa_validation_attempts": attempts,
             },
-        }
-
-    async def _initiate_stk_push(
-        self,
-        session: ConversationSession,
-        context: dict,
-        payment_phone: str,
-    ) -> dict:
-        booking_id = context.get("booking_id")
-        booking_reference = context.get("booking_reference")
-        deposit_amount = context.get("deposit_amount")
-
-        if not all([booking_id, booking_reference, deposit_amount]):
-            app_logger.error(
-                "Missing booking details in context",
-                session_id=session.id,
-                context=context,
-            )
-            return {
-                "text": "I apologize, but something went wrong. "
-                "Please start your booking again by typing 'book'.",
-                "update_context": {},
-                "transition_to": ConversationState.IDLE,
-            }
-
-        # Get booking from database
-        booking = self.booking_repo.get_by_id(booking_id)
-        if not booking:
-            app_logger.error(
-                "Booking not found",
-                session_id=session.id,
-                booking_id=booking_id,
-            )
-            return {
-                "text": "I apologize, but I couldn't find your booking. "
-                "Please start again by typing 'book'.",
-                "update_context": {},
-                "transition_to": ConversationState.IDLE,
-            }
-
-        # Prepare STK push parameters
-        account_reference = booking_reference
-        transaction_desc = f"Deposit for {booking.service_name}"
-        callback_url = settings.DARAJA_CALLBACK_URL
-
-        app_logger.info(
-            "Initiating STK push",
-            booking_id=booking_id,
-            booking_reference=booking_reference,
-            amount=deposit_amount,
-            payment_phone=payment_phone,
-        )
-
-        try:
-            # Initiate STK push
-            stk_response = await self.daraja_client.initiate_stk_push(
-                customer_phone=payment_phone,
-                amount=deposit_amount,
-                account_reference=account_reference,
-                transaction_desc=transaction_desc,
-                callback_url=callback_url,
-            )
-
-            # Update booking with CheckoutRequestID
-            booking.mpesa_checkout_request_id = stk_response.checkout_request_id
-            self.booking_repo.session.commit()
-
-            app_logger.info(
-                "STK push initiated successfully",
-                booking_id=booking_id,
-                checkout_request_id=stk_response.checkout_request_id,
-            )
-
-            # Show success message
-            message = (
-                f"📱 **Payment Request Sent!**\n\n"
-                f"Please check your phone for an M-Pesa payment prompt.\n\n"
-                f"💰 Amount: KES {deposit_amount:,}\n"
-                f"📋 Reference: {booking_reference}\n\n"
-                f"Enter your M-Pesa PIN to complete the payment.\n\n"
-                f"⏱️ The prompt will expire in 60 seconds."
-            )
-
-            return {
-                "text": message,
-                "transition_to": ConversationState.PAYMENT_PENDING,
-            }
-
-        except Exception as e:
-            app_logger.error(
-                "Failed to initiate STK push",
-                booking_id=booking_id,
-                error=str(e),
-            )
-
-            return {
-                "text": "I apologize, but we couldn't send the payment request. "
-                "Please try again or contact us directly:\n"
-                "📞 +254 712 345 678",
-                "transition_to": ConversationState.IDLE,
-            }
-
-    async def _cancel_booking_due_to_validation_failure(
-        self,
-        context: dict,
-        customer_name: str | None = None,
-    ) -> dict:
-        booking_id = context.get("booking_id")
-
-        if booking_id:
-            # Cancel the booking in database
-            self.booking_repo.cancel_booking(booking_id)
-            app_logger.info(
-                "Booking cancelled due to validation failure",
-                booking_id=booking_id,
-            )
-
-        greeting = f"{customer_name}" if customer_name else "there"
-
-        message = (
-            f"Sorry {greeting}, we couldn't verify a valid M-Pesa number.\n\n"
-            f"Your booking has been cancelled.\n\n"
-            f"If you'd like to try again, please start a new booking "
-            f"or contact us directly:\n"
-            f"📞 +254 712 345 678\n"
-            f"📧 info@glowhavenbeauty.co.ke"
-        )
-
-        return {
-            "text": message,
-            "update_context": {},
-            "transition_to": ConversationState.IDLE,
         }

@@ -32,7 +32,7 @@ class DarajaCallbackService:
             result_desc=result_desc,
         )
 
-        # Find booking by CheckoutRequestID
+        # find booking by CheckoutRequestID
         booking = self.booking_repo.get_by_checkout_request_id(checkout_request_id)
 
         if not booking:
@@ -56,6 +56,8 @@ class DarajaCallbackService:
         payload: DarajaCallbackPayload,
         booking: Booking,
     ) -> None:
+        assert booking.id is not None, "Booking ID must exist for database record"
+
         receipt_number = payload.get_receipt_number()
         amount = payload.get_amount()
 
@@ -81,6 +83,8 @@ class DarajaCallbackService:
         payload: DarajaCallbackPayload,
         booking: Booking,
     ) -> None:
+        assert booking.id is not None, "Booking ID must exist for database record"
+
         result_desc = payload.body.stk_callback.result_desc
 
         app_logger.warning(

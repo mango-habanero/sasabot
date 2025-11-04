@@ -72,3 +72,21 @@ class OutboundMessageRequest(BaseModel):
     text: TextMessage | None = None
     interactive: Interactive | None = None
     document: DocumentMedia | None = None
+
+
+class TokenDebugRequest(BaseModel):
+    """Request parameters for debug_token endpoint."""
+
+    input_token: str = Field(..., description="Token to debug")
+    access_token: str = Field(..., description="App access token (app_id|app_secret)")
+
+
+class TokenExchangeRequest(BaseModel):
+    """Request parameters for token exchange endpoint."""
+
+    grant_type: str = Field(
+        default="fb_exchange_token", description="Grant type for token exchange"
+    )
+    client_id: str = Field(..., description="Meta app ID")
+    client_secret: str = Field(..., description="Meta app secret")
+    fb_exchange_token: str = Field(..., description="Current token to exchange")

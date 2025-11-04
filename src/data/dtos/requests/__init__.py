@@ -15,6 +15,8 @@ from .whatsapp import (
     InteractiveHeader,
     OutboundMessageRequest,
     TextMessage,
+    TokenDebugRequest,
+    TokenExchangeRequest,
 )
 
 __all__ = [
@@ -26,6 +28,8 @@ __all__ = [
     "InteractiveFooter",
     "InteractiveHeader",
     "OutboundMessageRequest",
+    "TokenDebugRequest",
+    "TokenExchangeRequest",
     "TextMessage",
     "WebhookMessage",
     "WebhookPayload",

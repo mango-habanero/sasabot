@@ -260,6 +260,10 @@ class BookingConfirmHandler(BaseStateHandler):
                 "transition_to": ConversationState.IDLE,
             }
 
+        assert isinstance(selected_date, str), "selected_date must be a string"
+        assert isinstance(selected_time, str), "selected_time must be a string"
+        assert isinstance(datetime_display, str), "datetime_display must be a string"
+
         category = self.context_service.get_categories(business_id)
         category_obj = next((c for c in category if c.id == category_id), None)
         category_name = category_obj.name if category_obj else "Unknown"

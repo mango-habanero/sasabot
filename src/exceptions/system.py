@@ -1,9 +1,26 @@
 """Exceptions module."""
 
+from http import HTTPStatus
 from typing import Any
 
 from ..data.enums import ErrorCode
 from .base import BaseApplicationException
+
+
+class ExternalServiceException(BaseApplicationException):
+    """Raised when an infrastructure-related error occurs."""
+
+    def __init__(
+        self,
+        message: str,
+        details: dict[str, Any] | None = None,
+    ):
+        super().__init__(
+            code=ErrorCode.EXTERNAL_SERVICE_ERROR.code,
+            details=details,
+            message=message,
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
 
 class InvalidStateTransitionError(BaseApplicationException):
@@ -22,8 +39,8 @@ class InvalidStateTransitionError(BaseApplicationException):
             details["attempted_state"] = attempted_state
 
         super().__init__(
-            message=message,
             code=ErrorCode.INVALID_STATE_TRANSITION.code,
+            message=message,
             details=details,
             status_code=ErrorCode.INVALID_STATE_TRANSITION.status,
         )
@@ -53,8 +70,8 @@ class ResourceNotFoundError(BaseApplicationException):
             message = f"{resource_type.replace('_', ' ').title()} not found"
 
         super().__init__(
-            message=message,
             code=ErrorCode.RESOURCE_NOT_FOUND.code,
             details=details,
+            message=message,
             status_code=ErrorCode.RESOURCE_NOT_FOUND.status,
         )

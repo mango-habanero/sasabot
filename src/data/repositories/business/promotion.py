@@ -86,9 +86,12 @@ class PromotionRepository:
             .where(Promotion.business_id == business_id)
             .where(Promotion.status == PromotionStatus.ACTIVE)
             .where(
-                (col(Promotion.start_date).is_(None)) | (Promotion.start_date <= today)
+                (col(Promotion.start_date).is_(None))
+                | (col(Promotion.start_date) <= today)
             )
-            .where((col(Promotion.end_date).is_(None)) | (Promotion.end_date >= today))
+            .where(
+                (col(Promotion.end_date).is_(None)) | (col(Promotion.end_date) >= today)
+            )
         )
 
         return list(self.session.exec(statement).all())

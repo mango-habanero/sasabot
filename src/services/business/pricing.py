@@ -118,6 +118,11 @@ class PricingService:
         deposit = self.calculate_deposit(service_price, business_id)
         config = self.config_repo.get_by_business_id(business_id)
 
+        if not config:
+            raise ResourceNotFoundError(
+                f"Configuration not found for business_id: {business_id}"
+            )
+
         return (
             f"{format_price_display(deposit)} "
             f"({config.deposit_percentage:.0f}% deposit)"

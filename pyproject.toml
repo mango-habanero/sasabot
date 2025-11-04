@@ -12,7 +12,7 @@ dependencies = [
     "anthropic>=0.72.0",
     "asgi-correlation-id>=4.3.4",
     "cryptography>=46.0.3",
-    "fastapi>=0.120.3",
+    "fastapi>=0.120.4",
     "pip>=25.2",
     "phonenumbers>=9.0.17",
     "pydantic-settings>=2.10.1",
@@ -40,6 +40,9 @@ dev = [
 docs = [
     "email-validator>=2.0.0"
 ]
+
+[tool.mypy]
+ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py313"

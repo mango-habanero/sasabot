@@ -27,3 +27,30 @@ class WhatsAppAPIResponse(BaseModel):
     def message_id(self) -> str:
         """Extract the message ID from response."""
         return self.messages[0].id if self.messages else ""
+
+
+class GranularScope(BaseModel):
+    """Individual granular scope entry."""
+
+    scope: str
+
+
+class TokenDebugData(BaseModel):
+    """Token debug information."""
+
+    app_id: str
+    type: str
+    application: str
+    data_access_expires_at: int
+    expires_at: int
+    is_valid: bool
+    issued_at: int
+    scopes: list[str]
+    granular_scopes: list[GranularScope]
+    user_id: str
+
+
+class TokenDebugResponse(BaseModel):
+    """Response from Meta debug_token endpoint."""
+
+    data: TokenDebugData
