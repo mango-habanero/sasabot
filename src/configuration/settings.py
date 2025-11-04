@@ -11,18 +11,6 @@ from src.configuration.logger import app_logger
 
 
 def _parse_cors(v: Any) -> list[str]:
-    """
-    Parses the given value to extract a list of CORS origins. The input can be a string
-    representing a list (JSON format or comma-separated), or an existing list of origins.
-    Returns a processed list of trimmed and valid origins.
-
-    :param v: Input value representing CORS origins. Can be a list, JSON array string,
-        or a comma-separated string.
-    :type v: Any
-    :returns: A list of processed CORS origins in string format.
-    :rtype: list[str]
-    :raises ValueError: If the input value is not in a valid format or cannot be parsed.
-    """
     if isinstance(v, str):
         if v.startswith("[") and v.endswith("]"):
             import json
@@ -105,8 +93,10 @@ class Settings(BaseSettings):
     )
 
     # Whatsapp configuration
+    META_APP_ID: str = Field(description="App ID")
+    META_APP_SECRET: str = Field(description="App secret")
     META_API_VERSION: str = Field(description="API version")
-    WHATSAPP_ACCESS_TOKEN: str = Field(description="Whatsapp access token")
+    META_SYSTEM_USER_TOKEN: str = Field(description="System user token")
     WHATSAPP_PHONE_NUMBER_ID: str = Field(description="Whatsapp phone number id")
     WHATSAPP_WEBHOOK_VERIFICATION_TOKEN: str = Field(
         description="Whatsapp webhook verification token"
@@ -118,7 +108,7 @@ class Settings(BaseSettings):
         "DARAJA_CONSUMER_SECRET",
         "DARAJA_INITIATOR_PASSWORD",
         "DARAJA_PASSKEY",
-        "WHATSAPP_ACCESS_TOKEN",
+        "META_APP_SECRET",
         "WHATSAPP_WEBHOOK_VERIFICATION_TOKEN",
     }
 
