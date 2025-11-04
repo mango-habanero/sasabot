@@ -276,7 +276,7 @@ class ConversationService:
             except Exception as e:
                 app_logger.error(
                     "State transition or new handler execution failed",
-                    session_id=session.id,
+                    session_id=session.id if session else None,
                     target_state=response.get("transition_to"),
                     error=str(e),
                 )
