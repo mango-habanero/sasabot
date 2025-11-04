@@ -5,6 +5,11 @@ from http import HTTPStatus
 
 
 class ErrorCode(Enum):
+    EXTERNAL_SERVICE_ERROR = (
+        "EXTERNAL_SERVICE_ERROR",
+        "An error occurred while communicating with an external service.",
+        HTTPStatus.INTERNAL_SERVER_ERROR,
+    )
     INTERNAL_SERVER_ERROR = (
         "INTERNAL_SERVER_ERROR",
         "An unexpected error occurred while processing your request. Please try again or contact support.",

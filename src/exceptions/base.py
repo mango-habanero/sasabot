@@ -11,9 +11,9 @@ class BaseApplicationException(Exception):
         details: dict[str, Any] | None = None,
         status_code: int = 500,
     ):
-        self.message = message
         self.code = code
         self.details = details or {}
+        self.message = message
         self.status_code = status_code
         super().__init__(self.message)
 
