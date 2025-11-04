@@ -94,7 +94,7 @@ def format_promotions(promotions: list[Promotion]) -> str:
 
 
 def format_services(categories: list[ServiceCategory], services: list[Service]) -> str:
-    services_by_category = {}
+    services_by_category: dict[int, list[Service]] = {}
     for service in services:
         if service.category_id not in services_by_category:
             services_by_category[service.category_id] = []
@@ -102,6 +102,9 @@ def format_services(categories: list[ServiceCategory], services: list[Service]) 
 
     lines = []
     for category in categories:
+        if category.id is None:
+            continue
+
         category_services = services_by_category.get(category.id, [])
         if not category_services:
             continue

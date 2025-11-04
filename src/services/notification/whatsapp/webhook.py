@@ -53,6 +53,11 @@ class WebhookService:
             )
             return 0
 
+        # Add this check
+        if business.id is None:
+            app_logger.error("Business has no ID, skipping webhook")
+            return 0
+
         app_logger.info(
             "Processing webhook for business",
             business_id=business.id,
@@ -106,7 +111,7 @@ class WebhookService:
                 await self.conversation_service.handle_message(
                     phone_number=webhook_msg.sender_phone,
                     message_content=webhook_msg.content,
-                    business_id=business.id,
+                    business_id=business.id,  # Now mypy knows this is int, not int | None
                     customer_name=contact_map.get(webhook_msg.sender_phone),
                 )
             except Exception as e:
