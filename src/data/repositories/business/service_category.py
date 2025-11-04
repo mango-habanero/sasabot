@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from src.configuration import app_logger
 from src.data.entities.business import ServiceCategory
@@ -80,7 +80,7 @@ class ServiceCategoryRepository:
             )
 
         statement = statement.order_by(
-            ServiceCategory.display_order, ServiceCategory.name
+            col(ServiceCategory.display_order), ServiceCategory.name
         )
 
         return list(self.session.exec(statement).all())

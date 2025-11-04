@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from src.configuration import app_logger
 from src.data.entities.business import Service
@@ -81,7 +81,7 @@ class ServiceRepository:
         if not include_deleted:
             statement = statement.where(Service.status != ServiceStatus.DELETED)
 
-        statement = statement.order_by(Service.display_order, Service.name)
+        statement = statement.order_by(col(Service.display_order), Service.name)
 
         return list(self.session.exec(statement).all())
 
@@ -93,7 +93,7 @@ class ServiceRepository:
         if not include_deleted:
             statement = statement.where(Service.status != ServiceStatus.DELETED)
 
-        statement = statement.order_by(Service.display_order, Service.name)
+        statement = statement.order_by(col(Service.display_order), Service.name)
 
         return list(self.session.exec(statement).all())
 

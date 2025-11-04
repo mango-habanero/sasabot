@@ -105,7 +105,7 @@ class BookingRepository:
         statement = (
             select(Booking)
             .where(Booking.appointment_date == target_date)
-            .order_by(Booking.appointment_time)
+            .order_by(col(Booking.appointment_time))
         )
         return list(self.session.exec(statement).all())
 
